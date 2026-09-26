@@ -1,0 +1,7 @@
+# Videocrack 运行依赖
+# 1.conda create -n videocrack python=3.12
+# 2.conda activate videocrack
+# 3.pip install -r requirements.txt
+yt-dlp
+playwright
+# 关键词搜索（浏览器通道）还需执行：playwright install chromium

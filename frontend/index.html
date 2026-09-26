@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="system">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>短视频链接采集台 · Senior Dev</title>
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="topbar"></div>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">短</div>
+      <div>
+        <h1>短视频链接采集台</h1>
+        <div class="sub">Bilibili · 抖音 · 快手 · 微博 · 小红书 · YouTube · Cookie 全生命周期 · yt-dlp 分轨下载</div>
+      </div>
+    </div>
+    <button class="theme-btn" id="themeBtn" title="切换主题">🌗 跟随系统</button>
+  </header>
+
+  <!-- ============ 顶级模式切换（三者同级） ============ -->
+  <div class="mode-switch">
+    <button class="mode-tab active" data-mode="search">🔎 链接检索</button>
+    <button class="mode-tab" data-mode="download">⬇️ yt-dlp 下载</button>
+    <button class="mode-tab" data-mode="cookie">🔑 Cookie 管理 <span class="tab-badge" id="tabCkBadge">…</span></button>
+    <button class="mode-tab" data-mode="downloads">📂 下载列表</button>
+  </div>
+
+  <!-- ============ 模式一：采集检索 ============ -->
+  <div id="modeSearch">
+  <div class="ck-bar" id="ckBar1"></div>
+  <section class="card">
+    <h2>采集配置</h2>
+    <div class="row">
+      <div>
+        <label>关键词（逗号分隔，或每行一个）</label>
+        <textarea id="keywords" placeholder="前端动画, CSS技巧, JavaScript教程"></textarea>
+        <label style="margin-top:14px">作者 / UID（可选 · 按作者搜索其作品）</label>
+        <input type="text" id="author" style="width:100%;box-sizing:border-box"
+               placeholder="B站 UP名/UID；YT @handle；抖音 短链/主页/抖音号；微博/快手作者名" />
+        <div style="font-size:12px;opacity:.72;margin-top:4px;line-height:1.6">
+          填此项后，采集结果即为该作者的作品，按名搜索为尽力而为。<b>可与上方关键词同时使用。</b><br/>
+          <b>B站 / YouTube</b> 按 UP主名 / UID / @handle 精确列出其投稿（最稳）；<br/>
+          <b>抖音</b> ：①分享短链（v.douyin.com/…）②主页链接（douyin.com/user/…）③抖音号；<br/>
+          <b>微博 / 快手</b> ：按作者名搜索，需对应平台登录（匿名态会被风控返回空）；<br/>
+          <b>小红书</b> ：建议直接粘贴该平台作者主页链接（yt-dlp 列出）。
+        </div>
+      </div>
+      <div>
+        <label>平台（自动按已接入平台列出）</label>
+        <div class="checks" id="platChecks"></div>
+        <label>每平台最多条数（多关键词累计不超过此值）</label>
+        <input type="number" id="maxPer" value="10" min="1" max="5000" step="10" />
+        <div style="font-size:12px;opacity:.7;margin:-6px 0 10px">例：设为 10，则每个平台最终最多 10 条，不会因关键词多而爆量。</div>
+        <div class="checks" style="margin-top:10px">
+          <label class="check"><input type="checkbox" id="enrich" checked /> Bilibili 补充详情(时长/点赞)</label>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="useSaved" checked /> 使用已保存的 Cookie</label>
+        </div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="browserSearch" checked /> 浏览器搜索通道（所有 6 个平台关键词搜索共用的真实浏览器通道，自动绕过签名风控；已安装 Playwright 时默认开启）</label>
+        </div>
+        <div style="font-size:12px;opacity:.72;margin:2px 0 0 2px;line-height:1.5">快手/抖音/微博/小红书/YouTube 的关键词搜索都走浏览器通道（纯 HTTP 无法生成签名）。</div>
+      </div>
+    </div>
+
+    <label>抖音 / 快手 分享链接（把 App 内「复制链接」文案整段粘贴，可靠解析）</label>
+    <textarea id="resolveText" placeholder="https://v.douyin.com/xxxx/ 用这个打开&#10;https://v.kuaishou.com/yyyy"></textarea>
+
+    <button class="run" id="runBtn">▶ 开始采集</button>
+    <div id="collectProgress" class="collect-progress hidden">
+      <div class="cp-bar"><div class="cp-fill" id="cpFill"></div></div>
+      <div class="cp-text" id="cpText">准备中…</div>
+    </div>
+    <div id="notes" class="notice info hidden" style="margin-top:14px"></div>
+  </section>
+
+  <section class="card" id="resultCard">
+    <h2>采集结果</h2>
+    <div class="toolbar">
+      <div>
+        <label>排序字段</label>
+        <select id="sortField">
+          <option value="likes">点赞数</option>
+          <option value="views">播放数</option>
+          <option value="duration">时长</option>
+          <option value="title">标题</option>
+          <option value="author">作者</option>
+          <option value="platform">平台</option>
+        </select>
+      </div>
+      <div>
+        <label>方向</label>
+        <select id="sortDir">
+          <option value="desc">降序</option>
+          <option value="asc">升序</option>
+        </select>
+      </div>
+      <div>
+        <label>平台筛选</label>
+        <select id="filterPlatform"><option value="">全部</option></select>
+      </div>
+      <div>
+        <label>最小点赞</label>
+        <input type="number" id="minLikes" value="0" min="0" />
+      </div>
+      <div>
+        <label>关键词筛选</label>
+        <input type="text" id="kwFilter" placeholder="标题/关键词包含…" />
+      </div>
+    </div>
+    <div class="count" id="count">尚未采集</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>平台</th><th>标题</th><th>UP主/作者</th>
+          <th>时长</th><th>点赞</th><th>播放</th><th>链接</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="8" class="empty">运行采集后在此显示结果</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card hidden" id="mdCard">
+    <h2>Markdown 报告（运行时生成）</h2>
+    <div class="md-actions">
+      <button class="btn primary" id="dlMd">⬇ 下载 MD</button>
+      <button class="btn" id="dlCsv">⬇ 下载 CSV</button>
+      <button class="btn" id="copyMd">⧉ 复制 MD</button>
+      <span class="sub" id="mdFile" style="align-self:center"></span>
+    </div>
+    <div class="md-actions" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+      <span class="sub" style="align-self:center">links.txt（纯链接，可直接粘贴回搜索框批量下载）：</span>
+      <button class="btn" id="dlTxt">⬇ 下载（全部）</button>
+      <button class="btn" id="copyTxt">⧉ 复制（全部）</button>
+      <button class="btn" id="dlTxtF">⬇ 下载（按上方筛选/排序）</button>
+      <button class="btn" id="copyTxtF">⧉ 复制（按上方筛选/排序）</button>
+    </div>
+    <pre class="md" id="mdView"></pre>
+  </section>
+  </div><!-- /modeSearch -->
+
+  <!-- ============ 模式二：yt-dlp 下载 ============ -->
+  <div id="modeDownload" class="hidden">
+    <div class="ck-bar" id="ckBar2"></div>
+    <section class="card">
+      <h2>yt-dlp 下载 <span class="tag" id="ydTag">检测中…</span>
+        <button class="mini" id="ydUpdate" style="margin-left:10px;vertical-align:middle"
+                title="检查当前 yt-dlp 是否与官网最新版一致，不一致则一键更新到最新版">🔄 检查 / 更新</button>
+      </h2>
+      <label>视频链接（Bilibili / 抖音 / 快手 / YouTube / 微博 / 小红书 等，yt-dlp 支持的平台均可）</label>
+      <textarea id="ydUrl" style="min-height:84px" placeholder="https://www.bilibili.com/video/BVxxxx&#10;https://www.douyin.com/video/xxxx  或 App 内「复制链接」"></textarea>
+      <div class="row" style="margin-top:14px">
+        <div>
+          <label>使用 Cookie（与检索共享，可在 🔑 Cookie 管理 中配置）</label>
+          <select id="ydPlatform"><option value="">自动匹配链接域名</option></select>
+        </div>
+        <div>
+          <label>品质选择方式</label>
+          <div class="seg" id="ydModeSeg">
+            <button type="button" data-fmode="preset" class="active">⚡ 快捷预设</button>
+            <button type="button" data-fmode="manual">🎚 逐轨精选</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="ydPresetBox">
+        <label>画质 / 格式</label>
+        <select id="ydQuality">
+          <option value="best">最高画质（视频+音频自动合并）</option>
+          <option value="1080p">1080p 及以下</option>
+          <option value="720p">720p 及以下</option>
+          <option value="360p">360p 及以下</option>
+          <option value="audio">仅音频（转 MP3）</option>
+        </select>
+      </div>
+
+      <div class="ck-acts" style="margin-top:16px">
+        <button class="btn" id="ydInfo">🔎 解析视频信息 / 全部品质</button>
+        <button class="btn primary" id="ydRun">⬇ 开始下载</button>
+        <button class="mini" id="ydOpenDir" title="下载文件保存在服务端 downloads/ 目录">📁 文件保存在 downloads/</button>
+      </div>
+
+      <div id="ydMsg" class="notice info hidden"></div>
+      <div class="prog hidden" id="ydProg">
+        <div class="prog-bar"><i id="ydProgFill"></i></div>
+        <div class="prog-meta" id="ydProgMeta"></div>
+      </div>
+      <div id="ydInfoBox" class="hidden" style="margin-top:14px"></div>
+      <div id="ydFormats" class="hidden"></div>
+      <pre class="yd-log hidden" id="ydLog" style="margin-top:14px"></pre>
+    </section>
+
+    <!-- ===== 批量下载（列表 / 播放列表） ===== -->
+    <section class="card" style="margin-top:22px">
+      <h2>📦 批量下载（列表 / 播放列表）</h2>
+      <div style="font-size:12px;opacity:.78;margin:0 0 12px;line-height:1.6">
+        粘贴<b>播放列表链接</b>或<b>多个视频链接</b>（空格 / 换行 / 逗号分隔；也可直接粘贴「链接检索」导出的 links.txt 文本），
+        点「🔎 解析列表」即可获得带封面的可下载清单；支持多选后统一设置格式批量下载。
+      </div>
+      <textarea id="batchUrls" style="min-height:90px" placeholder="https://www.youtube.com/playlist?list=xxxx&#10;https://www.bilibili.com/video/BVxxxx  https://www.douyin.com/video/yyyy&#10;（多链接用空格 / 换行 / 逗号分开）"></textarea>
+      <label class="check" title="仅对 B 站生效：粘贴合集 / 收藏夹 / 番剧 / 分P 链接时自动识别并展开为每条视频单独下载；关闭则整播放列表作为一条下载（沿用 yt-dlp 整列下载）。" style="margin-top:10px;display:block">
+        <input type="checkbox" id="batchExpandPlaylist" checked /> 自动解析 B 站播放列表（展开全部视频）
+      </label>
+      <div id="batchPlaylistHint" class="notice info hidden" style="margin-top:8px"></div>
+      <div class="batch-global" style="margin-top:14px;display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <label>全局下载格式（对所有选中视频生效）</label>
+          <select id="batchGlobalFormat">
+            <option value="best">最高画质（视频+音频合并）</option>
+            <option value="1080p">1080p 及以下</option>
+            <option value="720p">720p 及以下</option>
+            <option value="360p">360p 及以下</option>
+            <option value="audio">仅音频（转 MP3）</option>
+          </select>
+        </div>
+        <div>
+          <label>全局编码格式（兼容性）</label>
+          <select id="batchGlobalCodec">
+            <option value="">自动（不限制）</option>
+            <option value="h264">H.264 / AVC（兼容性最好）</option>
+            <option value="hevc">H.265 / HEVC（更省空间）</option>
+            <option value="av1">AV1（最省空间）</option>
+            <option value="vp9">VP9（Web 友好）</option>
+          </select>
+        </div>
+        <label class="check" style="margin-bottom:2px" title="勾选后点击「批量下载」将直接按上方全局格式 + 编码下载，不再弹出逐条设置窗口（合并容器默认 mp4，不去水印）。"><input type="checkbox" id="batchUseGlobal" /> 直接按全局格式下载（跳过设置弹窗）</label>
+      </div>
+      <div class="ck-acts" style="margin-top:14px">
+        <button class="btn primary" id="batchParse">🔎 解析列表（含播放列表）</button>
+        <button class="mini" id="batchClear">清空</button>
+      </div>
+      <div id="batchNotes" class="notice info hidden" style="margin-top:12px"></div>
+
+      <div class="batch-toolbar" id="batchToolbar" style="display:none">
+        <label class="check"><input type="checkbox" id="batchSelAll" checked /> 全选</label>
+        <span class="batch-count" id="batchSelCount">已选 0 / 0</span>
+        <button class="btn primary" id="batchDownload">⬇ 批量下载（0）</button>
+      </div>
+      <div class="batch-grid" id="batchGrid"></div>
+
+      <div class="batch-panel hidden" id="batchPanel">
+        <div class="prog" id="batchProgWrap"><div class="prog-bar"><i id="batchProgFill"></i></div>
+          <div class="prog-meta" id="batchProgMeta">准备中…</div></div>
+        <div id="batchStatus"></div>
+        <pre class="batch-log hidden" id="batchLog"></pre>
+      </div>
+    </section>
+  </div><!-- /modeDownload -->
+
+  <!-- 详情模态 -->
+  <div class="overlay hidden" id="detailModal">
+    <div class="modal">
+      <span class="close" id="detailClose">✕</span>
+      <h3>视频详情</h3>
+      <img class="detail-hero" id="detailThumb" alt="" onerror="this.style.display='none'" />
+      <div id="detailBody"></div>
+      <button class="btn" id="detailFormats" style="margin-top:14px">🔎 解析全部品质（只读预览）</button>
+      <div class="fmt-list hidden" id="detailFmtList"></div>
+      <div style="margin-top:14px;display:flex;gap:10px">
+        <button class="btn primary" id="detailAddBatch">➕ 加入批量下载</button>
+        <a class="btn" id="detailOpen" target="_blank" rel="noopener">↗ 打开原视频</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量下载设置模态 -->
+  <div class="overlay hidden" id="batchModal">
+    <div class="modal">
+      <span class="close" id="batchModalClose">✕</span>
+      <h3>批量下载设置</h3>
+      <div style="font-size:12px;opacity:.78;margin:-4px 0 14px">将应用于选中的 <b id="batchModalCount">0</b> 个视频（统一格式，逐条下载）。</div>
+      <label>画质 / 格式</label>
+      <select id="batchQuality">
+        <option value="best">最高画质（视频+音频自动合并）</option>
+        <option value="1080p">1080p 及以下</option>
+        <option value="720p">720p 及以下</option>
+        <option value="360p">360p 及以下</option>
+        <option value="audio">仅音频（转 MP3）</option>
+      </select>
+      <label>编码格式（兼容性，留空=不限制）</label>
+      <select id="batchCodec">
+        <option value="">自动（不限制）</option>
+        <option value="h264">H.264 / AVC（兼容性最好）</option>
+        <option value="hevc">H.265 / HEVC（更省空间）</option>
+        <option value="av1">AV1（最省空间）</option>
+        <option value="vp9">VP9（Web 友好）</option>
+      </select>
+      <label>自定义格式编号（可选，留空则用上方预设；如 <code>137+140</code> 表示指定视频轨+音频轨合并）</label>
+      <input type="text" id="batchFormatId" placeholder="例如 137+140 或留空" />
+      <label>合并容器（分轨合并时生效）</label>
+      <select id="batchContainer">
+        <option value="mp4">mp4</option><option value="mkv">mkv</option>
+        <option value="webm">webm</option><option value="mov">mov</option>
+        <option value="flv">flv</option><option value="avi">avi</option>
+      </select>
+      <label class="check"><input type="checkbox" id="batchAudioOnly" /> 仅音频（覆盖上方预设，转 MP3）</label>
+      <label class="check" title="实验性：用 ffmpeg delogo 去除 B 站视频右下角 UID 角标水印。叠加式水印无法无损去除，仅对静态角标有效，可能轻微裁剪画面；非 B 站链接不受影响。"><input type="checkbox" id="batchDelogo" /> B站去水印（实验·ffmpeg 裁剪角标）</label>
+      <div class="ck-acts" style="margin-top:16px">
+        <button class="btn primary" id="batchConfirm">✅ 确认并开始下载</button>
+        <button class="btn" id="batchCancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 登录态检测弹窗：识别到可用 Cookie 后提示确认保存 -->
+  <div class="overlay hidden" id="ckDetectOverlay">
+    <div class="modal">
+      <span class="close" id="ckDetectClose">✕</span>
+      <h3>✅ 检测到已登录</h3>
+      <p id="ckDetectBody" style="font-size:13px;opacity:.85;line-height:1.7;margin:6px 0 18px">
+        已识别到 <b id="ckDetectPlat">该网站</b> 的登录态 Cookie（<span id="ckDetectCount">0</span> 条）。
+        是否<b>立即保存</b>并关闭登录窗口？保存后下载/检索功能即可复用。
+      </p>
+      <div class="ck-acts">
+        <button class="btn primary" id="ckDetectConfirm">✅ 确认保存 Cookie</button>
+        <button class="btn" id="ckDetectLater">稍后再说</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 模式三：Cookie 管理 ============ -->
+  <div id="modeCookie" class="hidden">
+    <section class="card">
+      <h2>Cookie 管理 <span class="tag" id="pwTag">检测中…</span>
+        <span class="tag" style="background:rgba(31,209,200,.14);color:var(--accent3)">全局共享 · 检索与下载通用</span>
+      </h2>
+
+      <div class="ck-grid" id="ckGrid"></div>
+
+      <div class="row" style="margin-top:14px">
+        <div>
+          <label>粘贴 Cookie（任意格式自动识别转换）</label>
+          <textarea id="ckRaw" style="min-height:104px" placeholder="支持以下任意一种，直接整段粘贴即可：
+① Netscape cookies.txt 内容
+② EditThisCookie / Cookie-Editor 导出的 JSON
+③ DevTools Application 面板整表选中复制
+④ DevTools 请求右键「Copy as cURL」整段命令
+⑤ 控制台 document.cookie 的输出
+⑥ 原始 Cookie 头：ttwid=xxx; sessionid_ss=yyy"></textarea>
+        </div>
+        <div>
+          <label>归属平台</label>
+          <select id="ckPlatform">
+            <option value="auto">自动识别（推荐）</option>
+            <option value="bilibili">Bilibili</option>
+            <option value="douyin">抖音</option>
+            <option value="kuaishou">快手</option>
+            <option value="weibo">微博</option>
+            <option value="xiaohongshu">小红书</option>
+            <option value="youtube">YouTube</option>
+          </select>
+          <label>浏览器登录超时（秒）</label>
+          <input type="number" id="ckTimeout" value="180" min="60" max="900" />
+          <div class="ck-acts" style="margin-top:14px">
+            <button class="btn primary" id="ckImport">⇩ 解析并保存</button>
+            <button class="btn" id="ckLogin">🖥 浏览器登录获取</button>
+            <button class="btn hidden" id="ckStopAll" style="margin-left:8px">⏹ 停止登录</button>
+            <button class="mini" id="ckRefresh">↻ 刷新状态</button>
+          </div>
+        </div>
+          <div id="ckShotWrap" class="hidden" style="margin-top:14px">
+            <div class="browser-card">
+              <div class="browser-bar">
+                <span class="browser-title">🖥 实时浏览器 · <span id="ckShotPlat">—</span></span>
+                <span class="browser-hint">点击画面可聚焦输入框 · 输入网址回车跳转</span>
+                <button id="ckShotClose" class="browser-close" title="关闭窗口并停止登录任务">✕</button>
+              </div>
+              <div class="browser-tip">⚠ 实时画面预览：本面板是服务器端无头浏览器的实时画面，<b>不能直接拖拽操作</b>。
+                点击画面上的输入框可聚焦，再在下方输入文字回车即可发送（模拟浏览器输入，如手机号/验证码）；
+                也可以用手机 App 扫码完成登录。登录成功后会自动检测并保存 Cookie。</div>
+              <div class="browser-body">
+                <img id="ckLoginShot" alt="实时浏览器画面（点击可聚焦输入）" />
+              </div>
+              <div class="browser-footer">
+                <input id="ckShotInput" placeholder="输入文字（英文/中文均可）后回车，发送到浏览器当前聚焦输入框" />
+                <button class="btn mini" id="ckShotSend">发送</button>
+                <button class="btn primary" id="ckCaptureNow">✅ 我已完成登录，现在抓取 Cookie</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <div class="row" style="margin-top:14px">
+        <div style="flex:1">
+          <label>🌐 自定义网站（输入任意网址，浏览器打开后登录即自动抓取 Cookie）</label>
+          <input type="text" id="ckUrl" placeholder="https://www.bilibili.com/ 或 https://example.com/ 等，支持任意站点" />
+        </div>
+        <div style="align-self:flex-end">
+          <button class="btn" id="ckUrlLogin">🖥 打开网址并登录</button>
+        </div>
+      </div>
+
+      <div id="ckMsg" class="notice info hidden"></div>
+
+      <details class="help">
+        <summary>不会取 Cookie？点开看 30 秒教程</summary>
+        <ol>
+          <li><b>最省事：</b>点「浏览器登录获取」→ 弹出的浏览器里扫码登录 → 自动抓取并保存，登录一次长期复用。</li>
+          <li><b>手动方式：</b>浏览器打开并登录 <code>douyin.com</code> → F12 → Network → 任意请求右键 <code>Copy as cURL</code> → 整段粘贴到左侧框 → 「解析并保存」。</li>
+          <li><b>插件方式：</b>装 Cookie-Editor → Export → JSON → 粘贴 → 「解析并保存」。</li>
+          <li>保存后会自动生成 <code>cookies/&lt;平台&gt;_cookies.txt</code>，<b>链接检索与 yt-dlp 下载会自动复用同一份</b>，无需重复配置。</li>
+          <li>⚠ Cookie 等同账号凭据，仅存在你本机 <code>cookies/</code> 目录（已自动加 .gitignore），切勿外传。</li>
+          <li>🔑 <b>快手特别注意：</b>快手 Web 搜索接口强制要求请求签名(__NS_sig3)，纯 HTTP 粘贴 Cookie 也会被风控拦截（探活会显示 result=2 / 400002）。关键词搜索请勾选「浏览器搜索」，或改用「分享链接解析」通道最稳。</li>
+          <li>🔗 <b>任意网站：</b>在「🌐 自定义网站」框输入网址 → 点「打开网址并登录」→ 浏览器打开该站，登录后自动抓取并保存（落盘为 custom_&lt;域名&gt;，下载/分享链接解析可自动复用）。</li>
+        </ol>
+      </details>
+
+      <div class="sk-bar">
+        <button class="btn primary" id="skBtn">🔍 一键自检 Cookie 是否可用</button>
+        <label class="check"><input type="checkbox" id="skOnline" checked /> 含在线探活（真实请求平台接口）</label>
+        <span class="sub" id="skTime" style="margin-left:auto"></span>
+      </div>
+      <div id="selfCheckReport" class="sk-report hidden"></div>
+    </section>
+  </div><!-- /modeCookie -->
+
+  <!-- ============ 模式四：下载列表 ============ -->
+  <div id="modeDownloads" class="hidden">
+
+
+    <section class="card">
+      <h2>下载列表 <span class="sub" style="margin-left:8px">通过 yt-dlp 的下载历史与实时进度</span></h2>
+      <div class="dl-toolbar">
+        <select id="dlPlat">
+          <option value="">全部平台</option>
+          <option value="bilibili">Bilibili</option>
+          <option value="douyin">抖音</option>
+          <option value="kuaishou">快手</option>
+          <option value="weibo">微博</option>
+          <option value="xiaohongshu">小红书</option>
+          <option value="youtube">YouTube</option>
+        </select>
+        <select id="dlStatus">
+          <option value="">全部状态</option>
+          <option value="downloading">下载中</option>
+          <option value="done">已完成</option>
+          <option value="skipped">已存在(复用)</option>
+          <option value="error">失败</option>
+        </select>
+        <input type="text" id="dlSearch" placeholder="搜索标题或作者…" />
+        <button class="btn" id="dlRefresh">🔄 刷新</button>
+        <div class="dl-actions">
+          <span class="dl-selinfo" id="dlSelInfo">已选 0 项</span>
+          <button class="btn primary" id="dlSave">📂 从源文件移动</button>
+          <button class="btn" id="dlDownloadBtn">📥 批量下载</button>
+          <button class="btn" id="dlDelete">🗑 删除</button>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <span class="sub" id="dlCount"></span>
+        <div class="dl-view-switch" style="margin-left:auto" id="dlViewSwitch">
+          <button type="button" class="vs-btn active" data-view="row">☰ 单行</button>
+          <button type="button" class="vs-btn" data-view="grid">▦ 网格</button>
+        </div>
+      </div>
+
+      <div class="dl-list" id="dlList">
+        <section class="dl-sec" id="dlSecSession">
+          <header class="dl-sec-head" data-sec="session">
+            <span class="caret">▾</span>
+            <b>本次下载</b>
+            <span class="dl-sec-count" id="dlSessionCount"></span>
+            <label class="check dl-sec-sel"><input type="checkbox" class="dlSecSelAll" data-sec="session" /> 全选</label>
+          </header>
+          <div class="dl-sec-body">
+            <div id="dlLive"></div>
+            <div id="dlSessionHist"></div>
+          </div>
+        </section>
+        <section class="dl-sec" id="dlSecHist">
+          <header class="dl-sec-head" data-sec="hist">
+            <span class="caret">▾</span>
+            <b>历史内容</b>
+            <span class="dl-sec-count" id="dlHistCount"></span>
+            <label class="check dl-sec-sel"><input type="checkbox" class="dlSecSelAll" data-sec="hist" /> 全选</label>
+          </header>
+          <div class="dl-sec-body" id="dlHist"></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- 视频详情弹窗（网格/单行点击缩略图打开） -->
+    <div class="dl-modal hidden" id="dlDetail">
+      <div class="dl-modal-box">
+        <div class="dl-modal-head">
+          <strong>视频详情</strong>
+          <button class="btn" id="dlDetailClose" style="margin-left:auto">✕ 关闭</button>
+        </div>
+        <div class="dl-detail-body" id="dlDetailBody"></div>
+      </div>
+    </div>
+
+    <!-- 批量下载方式选择（单链接原生下载 / 压缩包下载） -->
+    <div class="dl-modal hidden" id="dlDownloadModal">
+      <div class="dl-modal-box" style="max-width:440px">
+        <div class="dl-modal-head">
+          <strong>批量下载方式</strong>
+          <button class="btn" id="dlDlClose" style="margin-left:auto">✕ 关闭</button>
+        </div>
+        <div class="dl-dl-body" style="padding:14px; display:flex; flex-direction:column; gap:10px">
+          <button class="btn" id="dlDlSingle">🔗 单链接下载（浏览器原生逐文件下载，每个文件一次确认）</button>
+          <button class="btn primary" id="dlDlZip">🗜 压缩包下载（打包为 zip 后仅一次确认下载）</button>
+        </div>
+      </div>
+    </div>
+  </div><!-- /modeDownloads -->
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
