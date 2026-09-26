@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import tempfile
+
 
 def _relaunch_under_playwright_python():
     # 当前解释器缺 playwright 时，按 ABI 安全的方式进程替换到带 playwright 的 Python（C 扩展不能跨次版本注入）
